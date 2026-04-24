@@ -1,0 +1,220 @@
+                   GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+                            Preamble
+
+  The GNU Affero General Public License is a free, copyleft license for
+software and other kinds of works, specifically designed to ensure
+cooperation with the community in the case of network server software.
+
+  The licenses for most software and other practical works are designed
+to make sure you have the freedom to distribute copies of free software
+(and to find the source code of it if you need to), to state what
+the licenses cover, and to ensure that you receive the same
+protections as you give free of charge to others.
+
+  The licenses cover copying and distribution but not modification.
+Network-based interaction with users is common but the license does not
+require source code distribution for such software. The Affero GPL fills
+this gap by requiring source code distribution for network-based software.
+
+  When we speak of free software, we are referring to freedom, not
+price. Our General Public Licenses are designed to make sure that you
+have the freedom to distribute copies of free software (and charge for
+them if you wish), that you receive source code or can get it if you
+want it, that you can change the software or use pieces of it in new
+free programs, and that you know you can do these things.
+
+  Developers that use the GNU GPL protect your rights with two steps:
+(1) assert copyright on the software, and (2) offer you this License
+giving you legal permission to copy, distribute and/or modify it.
+
+  For the developers' and authors' protection, the GPL clearly explains
+that there is no warranty for this free software. For both users' and
+authors' sake, the GPL requires that modified versions be marked as
+changed, so that their problems will not be attributed erroneously to
+authors of previous versions.
+
+  Some devices are designed to deny users access to install or run
+modified versions of the software inside them, although the manufacturer
+can do so. This is fundamentally incompatible with the aim of
+protecting users' freedom to change the software. The systematic
+pattern of such abuse occurs in the area of products for individuals to
+use, which is precisely where it is most unacceptable. Therefore, we
+have designed this version of the GPL to prohibit the practice for those
+products. For such problems, we define the term "modified" to apply to
+any work that is distributed and that would otherwise be prohibited by
+the terms of this License.
+
+  The "corresponding source" for a work of source code type is the
+complete source code for the work, including any modifications, plus any
+associated distribution and installation and network communication
+source code, for a work of object code type.
+
+  All other provisions of this license are the same as version 3 of the
+GNU General Public License.
+
+                       TERMS AND CONDITIONS
+
+  0. Definitions.
+
+  "This License" means the GNU Affero General Public License, Version 3.
+
+  "The Program" means any copyrightable work licensed under this
+License. Each licensee is addressed as "you".  "Licensees" and
+"recipients" may be individuals or organizations.
+
+  To "modify" a work means to copy from or adapt all or part of the work
+in a fashion requiring copyright permission, other than the making of an
+exact copy. The resulting work is called a "modified version" of the
+earlier work or a work "based on" the earlier work.
+
+  A "covered work" means either the unmodified Program or a work based
+on the Program.
+
+  To "propagate" a work means to do anything with it that, without
+permission, would make you directly or secondarily liable for
+infringement under applicable copyright law, except executing it on a
+computer or modifying a private copy. Propagation includes copying,
+distribution (with or without modification), making available to the
+public, and some other things.
+
+  To "contribute" means to use a work in a way that requires a new
+copyright license for the work or any derivative work.
+
+  "The copyright owner" means the individual or organization that holds
+copyright to the Program.
+
+  You are not required to accept this License in order to install, run,
+propagate, or distribute a Program. However, no one else may grant you
+permission to do so under terms other than this License.
+
+  1. Source Code.
+
+  The "source code" for a work means the preferred form of the work for
+making modifications to it.  For an object code kind of work, the source
+code is all the source code for all modules it contains.
+
+  The "corresponding source" for a work of source code type is the
+complete source code for the work covered by the license.
+
+  2. Basic Permissions.
+
+  All rights granted under this License are granted for the term of
+copyright on the Program, and are irrevocable provided the stated
+conditions are met. This License explicitly affirms your unlimited
+permission to run the unmodified Program.
+
+  You may copy and distribute verbatim copies of the Program's source
+code as you receive it, in any medium, provided that you conspicuously
+and appropriately publish on each copy an appropriate copyright notice;
+keep intact all notices stating that this license and any
+non-permissive terms added in accord with section 7 apply to the code;
+keep intact all notices that the absence of any warranty is always given
+with this license (unless you charge for the Program); and keep intact
+all notices that the absence of any warranty is always given with this
+license.
+
+  You may charge any price or no price for each copy that you distribute,
+and may offer protection or support for a fee.
+
+  3. Network Interaction.
+
+  If you modify the Program, your modified version must prominently offer
+all users interacting with it remotely through a computer network
+(accessed through the same server that runs the modified version) the
+opportunity to receive the corresponding source code for their version.
+
+  This requirement applies to the modified version if it is a network-based
+service, regardless of whether it is a modification of the original
+Program.
+
+  4. Copying.
+
+  You may copy and distribute the Program (or a work based on it) in
+object code or source code form, under the terms of sections 1 and 2,
+provided that you also meet each of these conditions:
+
+    a) Accompany the object code form with the complete corresponding
+    source code, or use a written offer valid for at least three years
+    to provide the source code.
+
+    b) The source code must be provided under this License.
+
+    c) Installation information must be provided if the object code form
+    is used in user products.
+
+  5. Combining and Distributing.
+
+  You may convey a covered work under terms of your choice, if you meet
+all conditions of this License. Your network interactions are not
+affected by this choice.
+
+  6. Conveying Non-Source Forms.
+
+  You may convey a covered work in object code form under this License,
+provided that you also meet the conditions of sections 1 and 2.
+
+  You may install and run a modified version in a user product without
+conveying it, if you meet all conditions of this License.
+
+  7. Additional Terms.
+
+  Additional permissions that are reasonable under the circumstances may
+be added to a copy. You may offer additional or different warranty
+protection and support for a fee.
+
+  8. Termination.
+
+  You may not propagate or modify a covered work except as expressly
+provided under this License. Any attempt otherwise to propagate or
+modify it is void, and will automatically terminate your rights under
+this License.
+
+  9. Acceptance.
+
+  You need not accept this License in order to install, propagate, or
+distribute a Program, nor any derivative works. However, no one else
+may grant you permission to do so under terms other than this License.
+
+                     NO WARRANTY
+
+  10. Because the program is licensed free of charge, there is no
+warranty for the program, to the extent permitted by applicable law.
+
+  11. If the program is modified by someone else and passed on, you
+will not receive the source code unless the modifier provides it.
+
+  12. If the program is used in a network, you must provide the
+corresponding source code.
+
+  END OF TERMS AND CONDITIONS
+
+How to Apply These Terms to Your New Programs
+
+  If you develop a new program, and you want it to be of the greatest
+possible use to the public, provide it under this License.
+
+  To do so, attach the following notices to the program. It is safest
+to attach them to the start of each source file to most effectively
+state the exclusion of warranty; and each file should have at least
+the "copyright" line and a pointer to where the full notice is found.
+
+    <one line to go to the copyright owner>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
