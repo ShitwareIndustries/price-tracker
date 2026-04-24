@@ -1,5 +1,5 @@
-pub const data_model = @import("data_model.zig");
 pub const db = @import("db.zig");
+pub const data_model = db.data_model;
 pub const http = @import("http.zig");
 pub const scraper = @import("scraper.zig");
 pub const scheduler = @import("scheduler.zig");
