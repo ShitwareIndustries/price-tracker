@@ -224,6 +224,12 @@ pub fn getUserById(db: sqlite.Sqlite, allocator: std.mem.Allocator, id: u64) !?d
     , data_model.User, .{id});
 }
 
+pub fn updateUserPassword(db: sqlite.Sqlite, id: u64, password_hash: []const u8) !void {
+    try db.execBind(
+        \\UPDATE users SET password_hash = ?1 WHERE id = ?2
+    , .{ password_hash, id });
+}
+
 const ListingRow = struct {
     id: u64,
     product_id: u64,

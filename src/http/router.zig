@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2025 Price Tracker Contributors
+
 const std = @import("std");
 
 pub const Method = enum {
@@ -17,33 +20,35 @@ pub const Method = enum {
     }
 };
 
+pub const HandlerId = enum {
+    register,
+    login,
+    me,
+    listProducts,
+    getProduct,
+    createProduct,
+    updateProduct,
+    deleteProduct,
+    listListings,
+    getListing,
+    createListing,
+    updateListing,
+    deleteListing,
+    listPricesByListing,
+    listPricesByProduct,
+    healthz,
+    readyz,
+};
+
 pub const Route = struct {
     method: Method,
     pattern: []const u8,
-    handler_id: enum {
-        register,
-        login,
-        me,
-        listProducts,
-        getProduct,
-        createProduct,
-        updateProduct,
-        deleteProduct,
-        listListings,
-        getListing,
-        createListing,
-        updateListing,
-        deleteListing,
-        listPricesByListing,
-        listPricesByProduct,
-        healthz,
-        readyz,
-    },
+    handler_id: HandlerId,
     require_auth: bool,
 };
 
 pub const RouteMatch = struct {
-    handler_id: Route.handler_id,
+    handler_id: HandlerId,
     require_auth: bool,
     params: std.StringHashMap([]const u8),
 
@@ -121,46 +126,46 @@ pub const default_routes = [_]Route{
 
 test "router exact match" {
     const allocator = std.testing.allocator;
-    const router = Router.init(&default_routes);
-    const m = router.match(allocator, .POST, "/api/auth/register");
+    const router_inst = Router.init(&default_routes);
+    var m = router_inst.match(allocator, .POST, "/api/auth/register");
     defer if (m) |*match_| match_.deinit();
     try std.testing.expect(m != null);
-    try std.testing.expectEqual(Route.handler_id.register, m.?.handler_id);
+    try std.testing.expectEqual(HandlerId.register, m.?.handler_id);
     try std.testing.expect(!m.?.require_auth);
 }
 
 test "router param extraction" {
     const allocator = std.testing.allocator;
-    const router = Router.init(&default_routes);
-    const m = router.match(allocator, .GET, "/api/products/42");
+    const router_inst = Router.init(&default_routes);
+    var m = router_inst.match(allocator, .GET, "/api/products/42");
     defer if (m) |*match_| match_.deinit();
     try std.testing.expect(m != null);
-    try std.testing.expectEqual(Route.handler_id.getProduct, m.?.handler_id);
+    try std.testing.expectEqual(HandlerId.getProduct, m.?.handler_id);
     const id = m.?.params.get("id").?;
     try std.testing.expectEqualStrings("42", id);
 }
 
 test "router no match" {
     const allocator = std.testing.allocator;
-    const router = Router.init(&default_routes);
-    const m = router.match(allocator, .GET, "/api/nonexistent");
+    const router_inst = Router.init(&default_routes);
+    const m = router_inst.match(allocator, .GET, "/api/nonexistent");
     try std.testing.expect(m == null);
 }
 
 test "router method mismatch" {
     const allocator = std.testing.allocator;
-    const router = Router.init(&default_routes);
-    const m = router.match(allocator, .DELETE, "/api/auth/register");
+    const router_inst = Router.init(&default_routes);
+    const m = router_inst.match(allocator, .DELETE, "/api/auth/register");
     try std.testing.expect(m == null);
 }
 
 test "router nested params" {
     const allocator = std.testing.allocator;
-    const router = Router.init(&default_routes);
-    const m = router.match(allocator, .GET, "/api/products/7/listings");
+    const router_inst = Router.init(&default_routes);
+    var m = router_inst.match(allocator, .GET, "/api/products/7/listings");
     defer if (m) |*match_| match_.deinit();
     try std.testing.expect(m != null);
-    try std.testing.expectEqual(Route.handler_id.listListings, m.?.handler_id);
+    try std.testing.expectEqual(HandlerId.listListings, m.?.handler_id);
     const id = m.?.params.get("id").?;
     try std.testing.expectEqualStrings("7", id);
 }

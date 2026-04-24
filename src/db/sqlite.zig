@@ -42,10 +42,10 @@ pub const Sqlite = struct {
         }
     }
 
-    pub fn execSlice(self: Sqlite, sql: []const u8) OpenError!void {
-        const sentinel = try std.heap.page_allocator.allocSentinel(u8, sql.len, 0);
+    pub fn execSlice(self: Sqlite, allocator: std.mem.Allocator, sql: []const u8) OpenError!void {
+        const sentinel = try allocator.allocSentinel(u8, sql.len, 0);
         @memcpy(sentinel[0..sql.len], sql);
-        defer std.heap.page_allocator.free(sentinel);
+        defer allocator.free(sentinel);
         try self.exec(sentinel);
     }
 

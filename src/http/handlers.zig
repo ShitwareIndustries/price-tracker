@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2025 Price Tracker Contributors
+
 const std = @import("std");
 const router = @import("router.zig");
 const jwt_mod = @import("../auth/jwt.zig");
@@ -40,16 +43,24 @@ pub const ServerConfig = struct {
     allocator: std.mem.Allocator,
     jwt_secret: []const u8,
     jwt_expiry: u32,
+    io: std.Io,
 };
 
-pub fn authenticateRequest(auth_header: ?[]const u8, secret: []const u8) ?u64 {
+fn unixTimestamp() i64 {
+    var ts: std.posix.timespec = undefined;
+    const rc = std.posix.system.clock_gettime(.REALTIME, &ts);
+    if (rc != 0) return 0;
+    return @intCast(ts.sec);
+}
+
+pub fn authenticateRequest(allocator: std.mem.Allocator, auth_header: ?[]const u8, secret: []const u8) ?u64 {
     const header = auth_header orelse return null;
     if (!std.mem.startsWith(u8, header, "Bearer ")) return null;
     const token = header["Bearer ".len..];
-    return jwt_mod.validateToken(token, secret) catch null;
+    return jwt_mod.validateToken(allocator, token, secret) catch null;
 }
 
-pub fn dispatch(cfg: ServerConfig, req: Request, handler_id: router.Route.handler_id) HandlerError!Response {
+pub fn dispatch(cfg: ServerConfig, req: Request, handler_id: router.HandlerId) HandlerError!Response {
     return switch (handler_id) {
         .register => handleRegister(cfg, req),
         .login => handleLogin(cfg, req),
@@ -86,17 +97,13 @@ pub fn handleRegister(cfg: ServerConfig, req: Request) HandlerError!Response {
         return HandlerError.DuplicateUsername;
     }
 
-    const salt = password_mod.generateSalt(cfg.allocator) catch return HandlerError.InternalError;
-    defer cfg.allocator.free(salt);
-    const hash = password_mod.hashPassword(cfg.allocator, pw, salt) catch return HandlerError.InternalError;
-    defer cfg.allocator.free(hash);
-    const stored = password_mod.formatStoredHash(cfg.allocator, salt, hash) catch return HandlerError.InternalError;
+    const hash = password_mod.hashPassword(cfg.allocator, cfg.io, pw) catch return HandlerError.InternalError;
 
     const user = data_model.User{
         .id = 0,
         .username = username,
-        .password_hash = stored,
-        .created_at = std.time.timestamp(),
+        .password_hash = hash,
+        .created_at = unixTimestamp(),
         .is_admin = false,
     };
     const id = crud.insertUser(cfg.db, user) catch return HandlerError.InternalError;
@@ -104,7 +111,7 @@ pub fn handleRegister(cfg: ServerConfig, req: Request) HandlerError!Response {
     const token = jwt_mod.generateToken(cfg.allocator, id, cfg.jwt_secret, cfg.jwt_expiry) catch return HandlerError.InternalError;
     defer cfg.allocator.free(token);
 
-    const body = std.fmt.allocPrint(cfg.allocator, "{{\"user_id\":{},\"token\":\"{s}\"}}", .{ id, token }) catch return HandlerError.OutOfMemory;
+    const body = try allocPrintTokenResponse(cfg.allocator, id, token);
     return .{ .status = 201, .body = body };
 }
 
@@ -123,11 +130,18 @@ pub fn handleLogin(cfg: ServerConfig, req: Request) HandlerError!Response {
         cfg.allocator.free(user.password_hash);
         return HandlerError.Unauthorized;
     }
+    if (password_mod.needsRehash(user.password_hash)) {
+        const new_hash = password_mod.hashPassword(cfg.allocator, cfg.io, pw) catch null;
+        if (new_hash) |h| {
+            _ = crud.updateUserPassword(cfg.db, user.id, h) catch {};
+            cfg.allocator.free(h);
+        }
+    }
 
     const token = jwt_mod.generateToken(cfg.allocator, user.id, cfg.jwt_secret, cfg.jwt_expiry) catch return HandlerError.InternalError;
     defer cfg.allocator.free(token);
 
-    const body = std.fmt.allocPrint(cfg.allocator, "{{\"user_id\":{},\"token\":\"{s}\"}}", .{ user.id, token }) catch return HandlerError.OutOfMemory;
+    const body = try allocPrintTokenResponse(cfg.allocator, user.id, token);
     cfg.allocator.free(user.username);
     cfg.allocator.free(user.password_hash);
     return .{ .status = 200, .body = body };
@@ -138,7 +152,7 @@ pub fn handleMe(cfg: ServerConfig, req: Request) HandlerError!Response {
     const user_opt = crud.getUserById(cfg.db, cfg.allocator, uid) catch return HandlerError.InternalError;
     const user = user_opt orelse return HandlerError.NotFound;
 
-    const body = std.fmt.allocPrint(cfg.allocator, "{{\"id\":{},\"username\":\"{s}\",\"is_admin\":{}}}", .{ user.id, user.username, user.is_admin }) catch return HandlerError.OutOfMemory;
+    const body = try allocPrintUserResponse(cfg.allocator, user.id, user.username, user.is_admin);
     cfg.allocator.free(user.username);
     cfg.allocator.free(user.password_hash);
     return .{ .status = 200, .body = body };
@@ -171,7 +185,7 @@ pub fn handleCreateProduct(cfg: ServerConfig, req: Request) HandlerError!Respons
     const uid = req.user_id orelse return HandlerError.Unauthorized;
     const product = parseProductFromBody(cfg.allocator, req.body, uid) catch return HandlerError.BadRequest;
     const id = crud.insertProduct(cfg.db, product) catch return HandlerError.InternalError;
-    const body = std.fmt.allocPrint(cfg.allocator, "{{\"id\":{}}}", .{id}) catch return HandlerError.OutOfMemory;
+    const body = try allocPrintIdResponse(cfg.allocator, id);
     return .{ .status = 201, .body = body };
 }
 
@@ -186,7 +200,7 @@ pub fn handleUpdateProduct(cfg: ServerConfig, req: Request) HandlerError!Respons
     var product = parseProductFromBody(cfg.allocator, req.body, uid) catch return HandlerError.BadRequest;
     product.id = id;
     crud.updateProduct(cfg.db, product) catch return HandlerError.InternalError;
-    const body = std.fmt.allocPrint(cfg.allocator, "{{\"id\":{}}}", .{id}) catch return HandlerError.OutOfMemory;
+    const body = try allocPrintIdResponse(cfg.allocator, id);
     return .{ .status = 200, .body = body };
 }
 
@@ -244,7 +258,7 @@ pub fn handleCreateListing(cfg: ServerConfig, req: Request) HandlerError!Respons
     if (product.user_id != uid) return HandlerError.Forbidden;
     const listing = parseListingFromBody(cfg.allocator, req.body, product_id) catch return HandlerError.BadRequest;
     const new_id = crud.insertListing(cfg.db, listing) catch return HandlerError.InternalError;
-    const body = std.fmt.allocPrint(cfg.allocator, "{{\"id\":{}}}", .{new_id}) catch return HandlerError.OutOfMemory;
+    const body = try allocPrintIdResponse(cfg.allocator, new_id);
     return .{ .status = 201, .body = body };
 }
 
@@ -262,7 +276,7 @@ pub fn handleUpdateListing(cfg: ServerConfig, req: Request) HandlerError!Respons
     var listing = parseListingFromBody(cfg.allocator, req.body, existing.product_id) catch return HandlerError.BadRequest;
     listing.id = id;
     crud.updateListing(cfg.db, listing) catch return HandlerError.InternalError;
-    const body = std.fmt.allocPrint(cfg.allocator, "{{\"id\":{}}}", .{id}) catch return HandlerError.OutOfMemory;
+    const body = try allocPrintIdResponse(cfg.allocator, id);
     return .{ .status = 200, .body = body };
 }
 
@@ -326,39 +340,64 @@ pub fn handleReadyz(_: ServerConfig, _: Request) HandlerError!Response {
     return .{ .status = 200, .body = "{\"status\":\"ready\"}" };
 }
 
+fn writeJsonEscaped(writer: anytype, input: []const u8) @TypeOf(writer).Error!void {
+    var i: usize = 0;
+    while (i < input.len) : (i += 1) {
+        switch (input[i]) {
+            '"' => try writer.writeAll("\\\""),
+            '\\' => try writer.writeAll("\\\\"),
+            '\n' => try writer.writeAll("\\n"),
+            '\r' => try writer.writeAll("\\r"),
+            '\t' => try writer.writeAll("\\t"),
+            else => {
+                if (input[i] < 0x20) {
+                    try writer.print("\\u00{x:0>2}", .{input[i]});
+                } else {
+                    try writer.writeByte(input[i]);
+                }
+            },
+        }
+    }
+}
+
 fn parseJsonString(allocator: std.mem.Allocator, body: []const u8, key: []const u8) ![]const u8 {
-    const search = try std.fmt.allocPrint(allocator, "\"{s}\":", .{key});
-    defer allocator.free(search);
-    const start = std.mem.indexOf(u8, body, search) orelse return error.InvalidFormat;
-    var i: usize = start + search.len;
+    const key_prefix = "\"" ++ key ++ "\":";
+    const start = std.mem.indexOf(u8, body, key_prefix) orelse return error.InvalidFormat;
+    var i: usize = start + key_prefix.len;
     while (i < body.len and body[i] == ' ') : (i += 1) {}
     if (i >= body.len or body[i] != '"') return error.InvalidFormat;
     i += 1;
     const val_start = i;
-    while (i < body.len and body[i] != '"') : (i += 1) {}
+    while (i < body.len) : (i += 1) {
+        if (body[i] == '\\') {
+            i += 1;
+        } else if (body[i] == '"') {
+            break;
+        }
+    }
     if (i >= body.len) return error.InvalidFormat;
     return try allocator.dupe(u8, body[val_start..i]);
 }
 
-fn parseJsonF64(body: []const u8, key: []const u8) ?f64 {
-    const search = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\":", .{key}) catch return null;
-    defer std.heap.page_allocator.free(search);
-    const start = std.mem.indexOf(u8, body, search) orelse return null;
-    const val_start = start + search.len;
+fn parseJsonF64(allocator: std.mem.Allocator, body: []const u8, key: []const u8) ?f64 {
+    const key_prefix = "\"" ++ key ++ "\":";
+    const start = std.mem.indexOf(u8, body, key_prefix) orelse return null;
+    const val_start = start + key_prefix.len;
     var end = val_start;
     while (end < body.len and body[end] != ',' and body[end] != '}') : (end += 1) {}
     const val_str = std.mem.trim(u8, body[val_start..end], " \"");
+    _ = allocator;
     return std.fmt.parseFloat(f64, val_str) catch null;
 }
 
-fn parseJsonU32(body: []const u8, key: []const u8) ?u32 {
-    const search = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\":", .{key}) catch return null;
-    defer std.heap.page_allocator.free(search);
-    const start = std.mem.indexOf(u8, body, search) orelse return null;
-    const val_start = start + search.len;
+fn parseJsonU32(allocator: std.mem.Allocator, body: []const u8, key: []const u8) ?u32 {
+    const key_prefix = "\"" ++ key ++ "\":";
+    const start = std.mem.indexOf(u8, body, key_prefix) orelse return null;
+    const val_start = start + key_prefix.len;
     var end = val_start;
     while (end < body.len and body[end] != ',' and body[end] != '}') : (end += 1) {}
     const val_str = std.mem.trim(u8, body[val_start..end], " \"");
+    _ = allocator;
     return std.fmt.parseInt(u32, val_str, 10) catch null;
 }
 
@@ -367,10 +406,10 @@ fn parseProductFromBody(allocator: std.mem.Allocator, body: []const u8, user_id:
     const search_term = parseJsonString(allocator, body, "search_term") catch null;
     const category = parseJsonString(allocator, body, "category") catch null;
     const unit_type = parseJsonString(allocator, body, "unit_type") catch null;
-    const target_price = parseJsonF64(body, "target_price") orelse 0.0;
-    const unit_quantity = parseJsonF64(body, "unit_quantity") orelse 1.0;
-    const check_interval = parseJsonU32(body, "check_interval") orelse 3600;
-    const now = std.time.timestamp();
+    const target_price = parseJsonF64(allocator, body, "target_price") orelse 0.0;
+    const unit_quantity = parseJsonF64(allocator, body, "unit_quantity") orelse 1.0;
+    const check_interval = parseJsonU32(allocator, body, "check_interval") orelse 3600;
+    const now = unixTimestamp();
     return data_model.Product{
         .id = 0,
         .user_id = user_id,
@@ -406,7 +445,7 @@ fn parseListingFromBody(allocator: std.mem.Allocator, body: []const u8, product_
         .listing_type = listing_type,
         .selector_config = selector_config,
         .is_active = true,
-        .created_at = std.time.timestamp(),
+        .created_at = unixTimestamp(),
     };
 }
 
@@ -429,7 +468,25 @@ fn freePrice(allocator: std.mem.Allocator, p: data_model.Price) void {
 }
 
 fn allocPrintProduct(allocator: std.mem.Allocator, p: data_model.Product) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{{\"id\":{},\"user_id\":{},\"name\":\"{s}\",\"target_price\":{d},\"unit_quantity\":{d},\"check_interval\":{},\"created_at\":{}}}", .{ p.id, p.user_id, p.name, p.target_price, p.unit_quantity, p.check_interval, p.created_at });
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    const w = buf.writer();
+    try w.writeAll("{\"id\":");
+    try std.fmt.formatInt(p.id, 10, .lower, .{}, w);
+    try w.writeAll(",\"user_id\":");
+    try std.fmt.formatInt(p.user_id, 10, .lower, .{}, w);
+    try w.writeAll(",\"name\":\"");
+    try writeJsonEscaped(w, p.name);
+    try w.writeAll("\",\"target_price\":");
+    try std.fmt.formatFloat(&w, p.target_price, .{ .mode = .decimal, .precision = 2 });
+    try w.writeAll(",\"unit_quantity\":");
+    try std.fmt.formatFloat(&w, p.unit_quantity, .{ .mode = .decimal, .precision = 2 });
+    try w.writeAll(",\"check_interval\":");
+    try std.fmt.formatInt(p.check_interval, 10, .lower, .{}, w);
+    try w.writeAll(",\"created_at\":");
+    try std.fmt.formatInt(p.created_at, 10, .lower, .{}, w);
+    try w.writeByte('}');
+    return buf.toOwnedSlice();
 }
 
 fn allocPrintProductList(allocator: std.mem.Allocator, products: []data_model.Product) ![]const u8 {
@@ -447,7 +504,23 @@ fn allocPrintProductList(allocator: std.mem.Allocator, products: []data_model.Pr
 }
 
 fn allocPrintListing(allocator: std.mem.Allocator, l: data_model.Listing) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{{\"id\":{},\"product_id\":{},\"url\":\"{s}\",\"listing_type\":\"{s}\",\"is_active\":{},\"created_at\":{}}}", .{ l.id, l.product_id, l.url, @tagName(l.listing_type), l.is_active, l.created_at });
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    const w = buf.writer();
+    try w.writeAll("{\"id\":");
+    try std.fmt.formatInt(l.id, 10, .lower, .{}, w);
+    try w.writeAll(",\"product_id\":");
+    try std.fmt.formatInt(l.product_id, 10, .lower, .{}, w);
+    try w.writeAll(",\"url\":\"");
+    try writeJsonEscaped(w, l.url);
+    try w.writeAll("\",\"listing_type\":\"");
+    try writeJsonEscaped(w, @tagName(l.listing_type));
+    try w.writeAll("\",\"is_active\":");
+    try w.writeAll(if (l.is_active) "true" else "false");
+    try w.writeAll(",\"created_at\":");
+    try std.fmt.formatInt(l.created_at, 10, .lower, .{}, w);
+    try w.writeByte('}');
+    return buf.toOwnedSlice();
 }
 
 fn allocPrintListingList(allocator: std.mem.Allocator, listings: []data_model.Listing) ![]const u8 {
@@ -465,7 +538,23 @@ fn allocPrintListingList(allocator: std.mem.Allocator, listings: []data_model.Li
 }
 
 fn allocPrintPrice(allocator: std.mem.Allocator, p: data_model.Price) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{{\"id\":{},\"listing_id\":{},\"price\":{d},\"currency\":\"{s}\",\"stock_status\":\"{s}\",\"checked_at\":{}}}", .{ p.id, p.listing_id, p.price, p.currency, @tagName(p.stock_status), p.checked_at });
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    const w = buf.writer();
+    try w.writeAll("{\"id\":");
+    try std.fmt.formatInt(p.id, 10, .lower, .{}, w);
+    try w.writeAll(",\"listing_id\":");
+    try std.fmt.formatInt(p.listing_id, 10, .lower, .{}, w);
+    try w.writeAll(",\"price\":");
+    try std.fmt.formatFloat(&w, p.price, .{ .mode = .decimal, .precision = 2 });
+    try w.writeAll(",\"currency\":\"");
+    try writeJsonEscaped(w, p.currency);
+    try w.writeAll("\",\"stock_status\":\"");
+    try writeJsonEscaped(w, @tagName(p.stock_status));
+    try w.writeAll("\",\"checked_at\":");
+    try std.fmt.formatInt(p.checked_at, 10, .lower, .{}, w);
+    try w.writeByte('}');
+    return buf.toOwnedSlice();
 }
 
 fn allocPrintPriceList(allocator: std.mem.Allocator, prices: []data_model.Price) ![]const u8 {
@@ -482,6 +571,42 @@ fn allocPrintPriceList(allocator: std.mem.Allocator, prices: []data_model.Price)
     return buf.toOwnedSlice();
 }
 
+fn allocPrintTokenResponse(allocator: std.mem.Allocator, user_id: u64, token: []const u8) ![]const u8 {
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    const w = buf.writer();
+    try w.writeAll("{\"user_id\":");
+    try std.fmt.formatInt(user_id, 10, .lower, .{}, w);
+    try w.writeAll(",\"token\":\"");
+    try writeJsonEscaped(w, token);
+    try w.writeAll("\"}");
+    return buf.toOwnedSlice();
+}
+
+fn allocPrintUserResponse(allocator: std.mem.Allocator, id: u64, username: []const u8, is_admin: bool) ![]const u8 {
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    const w = buf.writer();
+    try w.writeAll("{\"id\":");
+    try std.fmt.formatInt(id, 10, .lower, .{}, w);
+    try w.writeAll(",\"username\":\"");
+    try writeJsonEscaped(w, username);
+    try w.writeAll("\",\"is_admin\":");
+    try w.writeAll(if (is_admin) "true" else "false");
+    try w.writeByte('}');
+    return buf.toOwnedSlice();
+}
+
+fn allocPrintIdResponse(allocator: std.mem.Allocator, id: u64) ![]const u8 {
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    const w = buf.writer();
+    try w.writeAll("{\"id\":");
+    try std.fmt.formatInt(id, 10, .lower, .{}, w);
+    try w.writeByte('}');
+    return buf.toOwnedSlice();
+}
+
 test "authenticateRequest valid token" {
     const allocator = std.testing.allocator;
     const secret = "test-secret";
@@ -489,22 +614,22 @@ test "authenticateRequest valid token" {
     defer allocator.free(token);
     const header = try std.fmt.allocPrint(allocator, "Bearer {s}", .{token});
     defer allocator.free(header);
-    const uid = authenticateRequest(header, secret);
+    const uid = authenticateRequest(std.testing.allocator, header, secret);
     try std.testing.expectEqual(@as(u64, 42), uid.?);
 }
 
 test "authenticateRequest missing header" {
-    const uid = authenticateRequest(null, "secret");
+    const uid = authenticateRequest(std.testing.allocator, null, "secret");
     try std.testing.expect(uid == null);
 }
 
 test "authenticateRequest invalid token" {
-    const uid = authenticateRequest("Bearer invalid", "secret");
+    const uid = authenticateRequest(std.testing.allocator, "Bearer invalid", "secret");
     try std.testing.expect(uid == null);
 }
 
 test "authenticateRequest wrong scheme" {
-    const uid = authenticateRequest("Basic abc123", "secret");
+    const uid = authenticateRequest(std.testing.allocator, "Basic abc123", "secret");
     try std.testing.expect(uid == null);
 }
 
@@ -521,12 +646,29 @@ test "parseJsonString missing key" {
     try std.testing.expectEqual(HandlerError.InvalidFormat, result);
 }
 
+test "writeJsonEscaped escapes special characters" {
+    const allocator = std.testing.allocator;
+    var buf = std.ArrayList(u8).init(allocator);
+    defer buf.deinit();
+    const w = buf.writer();
+    try writeJsonEscaped(w, "hello\"world\\test\nnew\rline\ttab\x01end");
+    try std.testing.expectEqualStrings("hello\\\"world\\\\test\\nnew\\rline\\ttab\\u0001end", buf.items);
+}
+
+test "parseJsonString escaped quote" {
+    const allocator = std.testing.allocator;
+    const result = try parseJsonString(allocator, "{\"name\":\"hello\\\"world\"}", "name");
+    defer allocator.free(result);
+    try std.testing.expectEqualStrings("hello\\\"world", result);
+}
+
 test "handleHealthz returns ok" {
     const cfg = ServerConfig{
         .db = undefined,
         .allocator = std.testing.allocator,
         .jwt_secret = "secret",
         .jwt_expiry = 3600,
+        .io = std.testing.io,
     };
     var params = std.StringHashMap([]const u8).init(std.testing.allocator);
     defer params.deinit();
@@ -549,6 +691,7 @@ test "handleReadyz returns ready" {
         .allocator = std.testing.allocator,
         .jwt_secret = "secret",
         .jwt_expiry = 3600,
+        .io = std.testing.io,
     };
     var params = std.StringHashMap([]const u8).init(std.testing.allocator);
     defer params.deinit();

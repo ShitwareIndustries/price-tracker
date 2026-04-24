@@ -8,26 +8,26 @@ pub const MigrationError = error{
     VersionMismatch,
 };
 
-pub fn runMigrations(db: sqlite.Sqlite) !void {
+pub fn runMigrations(allocator: std.mem.Allocator, db: sqlite.Sqlite) !void {
     try db.exec(
         \\CREATE TABLE IF NOT EXISTS schema_version (
-        \\  version INTEGER PRIMARY KEY,
-        \\  applied_at INTEGER NOT NULL
+        \\ version INTEGER PRIMARY KEY,
+        \\ applied_at INTEGER NOT NULL
         \\);
     );
 
-    const current = try getSchemaVersion(db);
+    const current = try getSchemaVersion(allocator, db);
     if (current >= data_model.SCHEMA_VERSION) return;
 
     const schema_sql = data_model.createSchema();
-    try db.execSlice(schema_sql);
+    try db.execSlice(allocator, schema_sql);
 
     try recordVersion(db, data_model.SCHEMA_VERSION);
 }
 
-pub fn getSchemaVersion(db: sqlite.Sqlite) !i64 {
+pub fn getSchemaVersion(allocator: std.mem.Allocator, db: sqlite.Sqlite) !i64 {
     const result = try db.queryOne(
-        std.heap.page_allocator,
+        allocator,
         "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
         struct { version: i64 },
         .{},

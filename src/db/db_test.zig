@@ -29,7 +29,7 @@ test "DB init creates all tables" {
     var db = try sqlite.Sqlite.init(":memory:");
     defer db.deinit();
 
-    try migrations.runMigrations(db);
+    try migrations.runMigrations(allocator, db);
 
     const table_iter = try db.queryAll(allocator,
         \\SELECT name FROM sqlite_master WHERE type='table' ORDER BY name
@@ -58,13 +58,14 @@ test "DB init creates all tables" {
 }
 
 test "migration is idempotent" {
+    const allocator = testing.allocator;
     var db = try sqlite.Sqlite.init(":memory:");
     defer db.deinit();
 
-    try migrations.runMigrations(db);
-    try migrations.runMigrations(db);
+    try migrations.runMigrations(allocator, db);
+    try migrations.runMigrations(allocator, db);
 
-    const version = try migrations.getSchemaVersion(db);
+    const version = try migrations.getSchemaVersion(allocator, db);
     try testing.expectEqual(@as(i64, data_model.SCHEMA_VERSION), version);
 }
 
@@ -72,7 +73,7 @@ test "Product CRUD round-trip" {
     const allocator = testing.allocator;
     var db = try sqlite.Sqlite.init(":memory:");
     defer db.deinit();
-    try migrations.runMigrations(db);
+    try migrations.runMigrations(allocator, db);
 
     _ = try crud.insertUser(db, .{
         .id = 0,
@@ -151,7 +152,7 @@ test "Listing CRUD round-trip" {
     const allocator = testing.allocator;
     var db = try sqlite.Sqlite.init(":memory:");
     defer db.deinit();
-    try migrations.runMigrations(db);
+    try migrations.runMigrations(allocator, db);
 
     _ = try crud.insertUser(db, .{
         .id = 0,
@@ -236,7 +237,7 @@ test "Price insert and query by listing_id" {
     const allocator = testing.allocator;
     var db = try sqlite.Sqlite.init(":memory:");
     defer db.deinit();
-    try migrations.runMigrations(db);
+    try migrations.runMigrations(allocator, db);
 
     _ = try crud.insertUser(db, .{
         .id = 0,
@@ -327,7 +328,7 @@ test "concurrent write test" {
     const allocator = testing.allocator;
     var db1 = try sqlite.Sqlite.init(":memory:");
     defer db1.deinit();
-    try migrations.runMigrations(db1);
+    try migrations.runMigrations(allocator, db1);
     try db1.setBusyTimeout(5000);
 
     _ = try crud.insertUser(db1, .{

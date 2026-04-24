@@ -49,4 +49,47 @@ pub fn build(b: *std.Build) void {
     });
     const run_db_test = b.addRunArtifact(db_test);
     test_step.dependOn(&run_db_test.step);
+
+    const unit_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/unit_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    unit_test_mod.linkLibrary(sqlite3_lib);
+    const unit_test = b.addTest(.{
+        .root_module = unit_test_mod,
+    });
+    const run_unit_test = b.addRunArtifact(unit_test);
+    test_step.dependOn(&run_unit_test.step);
+
+    const handler_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/handler_test_root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    handler_test_mod.linkLibrary(sqlite3_lib);
+    const handler_test = b.addTest(.{
+        .root_module = handler_test_mod,
+    });
+    const run_handler_test = b.addRunArtifact(handler_test);
+    test_step.dependOn(&run_handler_test.step);
+
+    const individual_test_files = [_][]const u8{
+        "src/auth/jwt.zig",
+        "src/auth/password.zig",
+        "src/http/router.zig",
+    };
+    for (individual_test_files) |file_path| {
+        const mod = b.createModule(.{
+            .root_source_file = b.path(file_path),
+            .target = target,
+            .optimize = optimize,
+        });
+        mod.linkLibrary(sqlite3_lib);
+        const t = b.addTest(.{
+            .root_module = mod,
+        });
+        const run_t = b.addRunArtifact(t);
+        test_step.dependOn(&run_t.step);
+    }
 }
